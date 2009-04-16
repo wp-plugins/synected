@@ -3,7 +3,7 @@ Contributors: jeff.smith
 Tags: short urls, twitter, rewrite rules
 Requires at least: 2.7
 Tested up to: 2.7.1
-Stable tag: 0.8
+Stable tag: 0.81
 
 Synected enables shortened URL creation on your own blog, using your own domain, removing the dependence on third-party services.
 

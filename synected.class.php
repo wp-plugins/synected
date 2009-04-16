@@ -47,8 +47,11 @@ class Synected
 			'view_page_size' => 20
 			);
 		$db_options = get_option('synected_options');
-		foreach($db_options as $key => $val) $db_options[$key] = stripslashes($val);
-		if (is_array($db_options)) $this->options = array_merge($this->options, $db_options);
+		if (is_array($db_options))
+		{ 
+			foreach($db_options as $key => $val) $db_options[$key] = stripslashes($val);
+			$this->options = array_merge($this->options, $db_options);
+		}
 		
 		add_action('activate_synected/synected.php', array($this, 'install'));
 		add_action('generate_rewrite_rules', array($this, 'add_rewrite_rules'));
