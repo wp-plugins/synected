@@ -11,13 +11,13 @@ Synected enables shortened URL creation on your own blog, using your own domain,
 
 Synected enables shortened URL creation on your own blog. Rather than relying on services such as [tinyurl.com](http://tinyurl.com/) 
 or [bit.ly](http://bit.ly/), Synected lets you easily create and use short links based off your own domain. This releases you 
-from dependence on a third party — a server error on tinyurl no longer prevents visitors from reaching your site. 
+from dependence on a third party - a server error on tinyurl no longer prevents visitors from reaching your site. 
 In addition, it strengthens your brand, keeping your domain name in view of your audience even on [Twitter](http://twitter.com/) and 
 other micro-communication platforms.
 
 Synected is highly configurable, and can be restricted to only certain Wordpress users, or opened to the general 
 public. It supports common features, such as optional custom URL names and tracking of URL click counts. No 
-.htaccess editing or other advanced installation steps are required; if Wordpress’ “Pretty Permalinks” feature 
+.htaccess editing or other advanced installation steps are required; if Wordpress' "Pretty Permalinks" feature 
 works for you, Synected will too, immediately on activation.
 
 Synected is currently in beta.
