@@ -1,0 +1,11 @@
+v0.82 / 2009-04-20
+- Fixed a bug that prevented unchecking of certain options after they had been checked
+- Added URL format history with management screen
+- Added experimental 'blank prefix' mode
+- Added support for short URLs on blogs that don't use permalinks
+
+v0.81 / 2009-04-16
+- Fixed a bug that caused a warning on first activation
+
+v0.8 / 2009-04-15
+- Initial release
