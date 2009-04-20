@@ -32,6 +32,7 @@ global $synected;
 if (isset($_GET['synected_action']))
 {
 	if (isset($_GET['url_id'])) $url_id = intval($_GET['url_id']);
+	if (isset($_GET['format_index'])) $format_index = intval($_GET['format_index']);
 	else die();
 	
 	switch($_GET['synected_action'])
@@ -46,6 +47,10 @@ if (isset($_GET['synected_action']))
 			break;
 		case 'delete':
 			$synected->delete_url($url_id);
+			echo 'ACK';
+			break;
+		case 'delete_format':
+			$synected->delete_format($format_index);
 			echo 'ACK';
 			break;
 	}

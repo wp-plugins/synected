@@ -26,9 +26,9 @@ if (!defined('ABSPATH')) {
 	}
 }
 
-global $synected;
+global $synected, $wp_rewrite;
 
-$code = $_GET['code'];
+$code = ($wp_rewrite->using_permalinks() ? $_GET['code'] : get_query_var($synected->options['url_query_var']));
 $url = $synected->get_url($code, true);
 
 if ($url)

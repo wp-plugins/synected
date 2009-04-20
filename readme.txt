@@ -3,7 +3,7 @@ Contributors: jeff.smith
 Tags: short urls, twitter, rewrite rules
 Requires at least: 2.7
 Tested up to: 2.7.1
-Stable tag: 0.81
+Stable tag: 0.82
 
 Synected enables shortened URL creation on your own blog, using your own domain, removing the dependence on third-party services.
 
@@ -17,8 +17,7 @@ other micro-communication platforms.
 
 Synected is highly configurable, and can be restricted to only certain Wordpress users, or opened to the general 
 public. It supports common features, such as optional custom URL names and tracking of URL click counts. No 
-.htaccess editing or other advanced installation steps are required; if Wordpress' "Pretty Permalinks" feature 
-works for you, Synected will too, immediately on activation.
+.htaccess editing or other advanced installation steps are required; Synected now works with or without Pretty Permalinks.
 
 Synected is currently in beta.
 

@@ -31,7 +31,7 @@ class Synected
 		
     private function Synected() 
     {
-		global $wpdb;
+		global $wpdb, $wp_rewrite;
 		$this->t_urls 			= 	$wpdb->prefix . "synected_urls";
 		$this->t_allowlist		= 	$wpdb->prefix . "synected_allowlist";
 		
@@ -42,22 +42,31 @@ class Synected
 			'create_from_url' => true,
 			'short_url_prefix' => 'u/',
 			'short_url_suffix' => '',
+			'url_query_var' => 'u',
 			'require_login' => true,
 			'require_permission' => true,
-			'view_page_size' => 20
+			'view_page_size' => 20,
+			'_format_history' => array()
 			);
 		$db_options = get_option('synected_options');
 		if (is_array($db_options))
 		{ 
-			foreach($db_options as $key => $val) $db_options[$key] = stripslashes($val);
+			$_history = $db_options['_format_history'];
+			$db_options = stripslashes_deep($db_options);
+			$db_options['_format_history'] = $_history;
+			if (!is_array($db_options['_format_history'])) $db_options['_format_history'] = array();
+			
 			$this->options = array_merge($this->options, $db_options);
 		}
 		
 		add_action('activate_synected/synected.php', array($this, 'install'));
-		add_action('generate_rewrite_rules', array($this, 'add_rewrite_rules'));
+		add_action('generate_rewrite_rules', array($this, 'add_rewrite_rules'), 100);
 		add_action('admin_menu', array($this, 'add_menus'));
+		add_action('wp', array($this, 'hook_query_var'));
 		
 		add_filter('capabilities_list', array($this, 'add_capabilities'));
+		add_filter('mod_rewrite_rules', array($this, 'add_rewrite_cond'), 100);
+		add_filter('query_vars', array($this, 'add_query_vars'));
     }
 	public static function singleton() 
 	{
@@ -127,11 +136,68 @@ class Synected
 		if ($this->options['create_from_url'])
 			$rewrite->add_external_rule('((http:/|https:/|www\.).+)$', PLUGINDIR.'/synected/create_url.php?url=$1');
 			
-		if (!empty($this->options['short_url_prefix']))
-			$rewrite->add_external_rule($this->options['short_url_prefix'].
-										'(.+)'.
-										$this->options['short_url_suffix'].
-										'$', PLUGINDIR.'/synected/url.php?code=$1');
+		if (empty($this->options['short_url_prefix']))
+		{
+			foreach ($rewrite->rules as $match => $query)
+			{
+				if ( 
+					strpos($match, '.') !== 0 &&
+					strpos($match, '(.') !== 0
+					)
+					$rewrite->add_external_rule($match, preg_replace('/\$matches\[(\d+)\]/', '\$$1', $query));
+			}
+			
+			$rewrite->add_external_rule('%synected_cond%', '%synected_cond%');
+		}
+		
+		$rewrite->add_external_rule($this->options['short_url_prefix'].
+									'(.+)'.
+									$this->options['short_url_suffix'].
+									'$', PLUGINDIR.'/synected/url.php?code=$1');
+		
+		if (!is_array($this->options['_format_history'])) $this->options['_format_history'] = array();				
+		foreach ($this->options['_format_history'] as $entry)
+		{
+			$rewrite->add_external_rule($entry['short_url_prefix'].
+									'(.+)'.
+									$entry['short_url_suffix'].
+									'$', PLUGINDIR.'/synected/url.php?code=$1');
+		}
+	}
+	function add_rewrite_cond($rules)
+	{
+		$home_root = parse_url(get_option('home'));
+		if ( isset( $home_root['path'] ) ) {
+			$home_root = trailingslashit($home_root['path']);
+		} else {
+			$home_root = '/';
+		}
+		
+		$replace = 'RewriteRule ^' . '%synected_cond%' . ' ' . $home_root . '%synected_cond%' . " [QSA,L]\n";
+		
+		$cond = "RewriteCond %{REQUEST_FILENAME} !-f\n" .
+				"RewriteCond %{REQUEST_FILENAME} !-d\n";
+				
+		return str_replace($replace, $cond, $rules);
+	}
+	function add_query_vars($query_vars)
+	{
+		$query_vars[] = $this->options['url_query_var'];
+		return $query_vars;
+	}
+	function hook_query_var($wp)
+	{
+		global $wp_rewrite;
+		
+		if (!$wp_rewrite->using_permalinks()) 
+		{
+			$code = get_query_var($this->options['url_query_var']);
+			if (!empty($code)) 
+			{
+				require(WP_PLUGIN_DIR.'/synected/url.php');
+				exit;
+			}
+		}
 	}
 	function create_url($url, $key = '')
 	{
@@ -202,10 +268,16 @@ class Synected
 	}
 	function full_short_url($code)
 	{
-		return trailingslashit($this->options['base_url']).
-			stripslashes($this->options['short_url_prefix']).
-			$code.
-			stripslashes($this->options['short_url_suffix']);
+		global $wp_rewrite;
+		
+		if ($wp_rewrite->using_permalinks())
+			return trailingslashit($this->options['base_url']).
+				stripslashes($this->options['short_url_prefix']).
+				$code.
+				stripslashes($this->options['short_url_suffix']);
+		else
+			return trailingslashit($this->options['base_url']).'?'.
+				$this->options['url_query_var'].'='.$code;
 	}
 	function get_url($code, $countclick = false)
 	{
@@ -368,6 +440,7 @@ SYNECTED_CONTENT;
 		add_menu_page("Short URLs", "Short URLs", $cap, basename(__FILE__).'/manage', array($this, 'view_urls_page'));
 		add_submenu_page(basename(__FILE__).'/manage', 'Manage Short URLs', 'Edit', 'edit_short_urls', basename(__FILE__).'/manage', array($this, 'view_urls_page'));
 		add_submenu_page(basename(__FILE__).'/manage', 'Create Short URL', 'Add New', $cap, basename(__FILE__).'/create', array($this, 'create_url_page'));
+		add_submenu_page(basename(__FILE__).'/manage', 'Manage Short URL Format History', 'Legacy Formats', 'edit_short_urls', basename(__FILE__).'/format-history', array($this, 'view_format_history_page'));
 		
 		//--incomplete--
 		//add_submenu_page(basename(__FILE__).'/create', 'URL Blacklist', 'URL Blacklist', 'edit_short_url_blacklist', basename(__FILE__).'/blacklist', array($this, 'view_blacklist_page'));
@@ -380,12 +453,45 @@ SYNECTED_CONTENT;
 	}
     function options_page()
     {
+    	global $wp_rewrite;
+    	$perma = $wp_rewrite->using_permalinks();
+    	
 		if (isset($_POST['Submit']))
 		{
+			$history_added = false;
 			foreach($this->options as $key => $val) 
 			{
-				if (isset($_POST["var_$key"]))
+				if (
+					($_POST["var_$key"] != $this->options[$key] && strpos($key, '_') !== 0) && 
+					($key != 'short_url_prefix' || $perma) && 
+					($key != 'short_url_suffix' || $perma) && 
+					($key != 'create_from_url' || $perma) && 
+					($key != 'url_query_var' || !$perma)
+					)
 				{
+					if ($key == 'short_url_prefix' || $key == 'short_url_suffix' && !$history_added)
+					{
+						$history_added = true;
+						$already_added = false;
+						foreach($this->options['_format_history'] as $entry)
+						{
+							if ($entry['short_url_prefix'] == $this->options['short_url_prefix'] && 
+								$entry['short_url_suffix'] == $this->options['short_url_suffix'])
+								$already_added = true;
+						}
+						if (!$already_added)
+							$this->options['_format_history'][] = array(
+								'short_url_prefix' => $this->options['short_url_prefix'],
+								'short_url_suffix' => $this->options['short_url_suffix']
+								);
+					}
+					global $wp;
+					if ($key == 'url_query_var' && in_array($_POST["var_$key"], $wp->public_query_vars))
+					{
+						$updateMessage .= 'The Query Parameter "'.$_POST["var_$key"].
+							'" is already in use by Wordpress or a plugin.'."<br />";
+						$_POST["var_$key"] = $this->options[$key];
+					}
 					$this->options[$key] = $_POST["var_$key"];
 					$update = true;
 				}
@@ -393,11 +499,13 @@ SYNECTED_CONTENT;
 			if ($update)
 			{
 				update_option('synected_options', $this->options);
-				foreach($this->options as $key => $val) $this->options[$key] = stripslashes($val);
+				$_history = $this->options['_format_history'];
+				$this->options = stripslashes_deep($this->options);
+				$this->options['_format_history'] = $_history;
 				global $wp_rewrite;
 				$wp_rewrite->flush_rules();
 			}
-			$updateMessage = 'Options saved'."<br />";
+			$updateMessage .= 'Options saved'."<br />";
 		}
 		if (isset($updateMessage) && $update) 
 			echo '<div id="message" class="updated fade"><p><strong>'.__($updateMessage).'</strong></p></div>';
@@ -438,10 +546,21 @@ SYNECTED_CONTENT;
 						<th scope="row"><label for="var_short_url_prefix">Short URL Prefix</label></th>
 						<td>
 							<input type="text" name="var_short_url_prefix" id="var_short_url_prefix" 
+								<?php if (!$perma) echo 'disabled="disabled"'; ?>
 								value="<?php echo $this->options['short_url_prefix']; ?>" class="regular-text" />
 							<br />
 							<span class="setting-description">
-								Required. This prefix is added to the front of all short URLs. It separates your 
+								<?php if ($perma) : ?>
+								<?php if (empty($this->options['short_url_prefix'])) : ?>
+								<div class="error">
+									<p>Warning: You are running without a URL Prefix. This mode is highly experimental, and 
+									may cause conflicts between your Wordpress permalinks and Synected short URLs. Use 
+									with caution.</p>
+								</div>
+								<?php endif; ?>
+								<strong>Note: Leaving this option blank is currently experimental.</strong><br />
+								Optional, but highly recommended. This prefix is added to the front of all short 
+								URLs. It separates your 
 								short URLs from the posts and pages on your site. Be sure to choose something that 
 								your regular permalinks would never begin with - for this reason, it's advisable to 
 								end your prefix with a forward slash (<tt>/</tt>). This setting makes use of regular 
@@ -449,6 +568,11 @@ SYNECTED_CONTENT;
 								RegEx special characters, a full list of which can be 
 								<a href="http://www.php.net/manual/en/regexp.reference.php">found here</a>. For example, 
 								the <tt>(</tt> character would be specified as <tt>\(</tt>.
+								<?php else : ?>
+								This option is only available when using Pretty Permalinks. To enable this, go to your 
+								<a href="<?php echo admin_url(); ?>options-permalink.php">permalink options</a> and 
+								choose a setting other than 'Default'.
+								<?php endif; ?>
 							</span>
 						</td>
 					</tr>
@@ -457,11 +581,42 @@ SYNECTED_CONTENT;
 						<th scope="row"><label for="var_short_url_suffix">Short URL Suffix</label></th>
 						<td>
 							<input type="text" name="var_short_url_suffix" id="var_short_url_suffix" 
+								<?php if (!$perma) echo 'disabled="disabled"'; ?>
 								value="<?php echo $this->options['short_url_suffix']; ?>" class="regular-text" />
 							<br />
 							<span class="setting-description">
+								<?php if ($perma) : ?>
 								Optional. This suffix is appended to the end of all short URLs. Follows the same 
 								regular expression escaping rules as the Prefix.
+								<?php else : ?>
+								This option is only available when using Pretty Permalinks. To enable this, go to your 
+								<a href="<?php echo admin_url(); ?>options-permalink.php">permalink options</a> and 
+								choose a setting other than 'Default'.
+								<?php endif; ?>
+							</span>
+						</td>
+					</tr>
+					
+					<tr valign="top">
+						<th scope="row"><label for="var_url_query_var">Short URL Query Parameter</label></th>
+						<td>
+							<input type="text" name="var_url_query_var" id="var_url_query_var" 
+								<?php if ($perma) echo 'disabled="disabled"'; ?>
+								value="<?php echo $this->options['url_query_var']; ?>" class="regular-text" />
+							<br />
+							<span class="setting-description">
+								<?php if (!$perma) : ?>
+								Required. This determines the querystring parameter that will be used for the short URL 
+								code. (For example, a Query Parameter of 'url' will result in a link similar to: 
+								<tt>http://example.com/?url=shortkey</tt>) 
+								Synected will attempt to prevent you from choosing a string that will conflict with 
+								Wordpress or one of your installed plugins.
+								<?php else : ?>
+								This option is only used when Pretty Permalinks are disabled or unavailable. To turn off 
+								Pretty Permalinks, go to your 
+								<a href="<?php echo admin_url(); ?>options-permalink.php">permalink options</a> and 
+								choose the 'Default' setting.
+								<?php endif; ?>
 							</span>
 						</td>
 					</tr>
@@ -486,10 +641,17 @@ SYNECTED_CONTENT;
 						<th scope="row"><label for="var_create_from_url">Enable creation from address bar?</label></th>
 						<td>
 							<input type="checkbox" name="var_create_from_url" id="var_create_from_url" value="1"
-								<?php if ($this->options['create_from_url']) echo 'checked="checked"'; ?> />
+								<?php if ($this->options['create_from_url']) echo ' checked="checked"'; 
+										if (!$perma) echo ' disabled="disabled"'; ?> />
 							<span class="setting-description">
+								<?php if ($perma) : ?>
 								Whether to enable short URL creation by adding the blog home URL to the front of an 
 								address, for example: <tt>http://blurbia.com/http://wordpress.org/</tt>
+								<?php else : ?>
+								This option is only available when using Pretty Permalinks. To enable this, go to your 
+								<a href="<?php echo admin_url(); ?>options-permalink.php">permalink options</a> and 
+								choose a setting other than 'Default'.
+								<?php endif; ?>
 							</span>
 						</td>
 					</tr>
@@ -519,8 +681,25 @@ SYNECTED_CONTENT;
 					
 	    		</table>
 	    		
+	    		<script type="text/javascript">
+	    			function checkPrefix()
+	    			{
+						<?php if (!empty($this->options['short_url_prefix'])) : ?>
+	    				if (document.getElementById('var_short_url_prefix').value == '')
+	    					return confirm('Warning!\n\n'+
+	    						'You are about to save with a blank URL Prefix. This mode is highly \n'+
+								'experimental and could alter or break the operation of your site. It\'s \n'+
+								'recommended that you make a backup of your .htaccess file before \n'+
+								'continuing. Are you sure you wish to save?');
+	    				else<?php 
+	    				endif; ?>
+	    					return true;
+	    			}
+	    		</script>
+	    		
 				<p class="submit">
-				<input type="submit" class="button-primary" name="Submit" value="<?= __('Save Settings');?>" />
+				<input type="submit" class="button-primary" name="Submit" value="<?= __('Save Settings');?>"
+					onclick="return checkPrefix();" />
 				</p>
 			</form>
     	</div>
@@ -528,23 +707,49 @@ SYNECTED_CONTENT;
     }
     function admin_init()
     {
+		if (isset($_GET['doaction'])) $action = $_GET['action'];
+		if (isset($_GET['doaction-b'])) $action = $_GET['action-b'];
+    	
     	switch($_GET['page'])
     	{
     		case basename(__FILE__).'/manage':
 				if (!current_user_can('edit_short_urls')) die('Access denied.');
-		    	if (isset($_GET['doaction']))
+		    	if (isset($action))
 		    	{
-		    		if ($_GET['action'] == 'block')
+		    		if ($action == 'block')
 		    		{
 		    			if (is_array($_GET['url'])) $this->block_url($_GET['url']);
 		    		}
-		    		elseif ($_GET['action'] == 'unblock')
+		    		elseif ($action == 'unblock')
 		    		{
 		    			if (is_array($_GET['url'])) $this->unblock_url($_GET['url']);
 		    		}
-		    		elseif ($_GET['action'] == 'delete')
+		    		elseif ($action == 'delete')
 		    		{
 		    			if (is_array($_GET['url'])) $this->delete_url($_GET['url']);
+		    		}
+		    		wp_redirect('?page='.$_GET['page']);
+		    	}
+		    	break;
+		    case basename(__FILE__).'/format-history':
+				if (!current_user_can('edit_short_urls')) die('Access denied.');
+		    	if (isset($action))
+		    	{
+		    		if ($action == 'delete')
+		    		{
+		    			if (is_array($_GET['entry']))
+		    			{
+		    				foreach($_GET['entry'] as $index)
+		    				{
+				    			if (isset($this->options['_format_history'][$index])) 
+				    				unset($this->options['_format_history'][$index]);
+		    				}
+		    				
+							update_option('synected_options', $this->options);
+							$this->options = stripslashes_deep($this->options);
+							global $wp_rewrite;
+							$wp_rewrite->flush_rules();
+		    			}
 		    		}
 		    		wp_redirect('?page='.$_GET['page']);
 		    	}
@@ -591,6 +796,17 @@ SYNECTED_CONTENT;
     				function(html) {
     					if (html == 'ACK')
     						jQuery('#url-row-'+id).css('display', 'none');
+    				}
+    			);
+    			return false;
+    		}
+    		function deleteLegacy(index)
+    		{
+    			jQuery.get('<?php echo WP_PLUGIN_URL; ?>/synected/ajax.php', 
+    				{ synected_action:'delete_format', format_index:index }, 
+    				function(html) {
+    					if (html == 'ACK')
+    						jQuery('#entry-row-'+index).css('display', 'none');
     				}
     			);
     			return false;
@@ -768,18 +984,16 @@ SYNECTED_CONTENT;
 		    		<?php endif; ?>
 		    		</tbody>
 		    	</table>
-		    </form>
-	    	<form method="get" action="">
 	    		<div class="tablenav">
 					<?php if (current_user_can('edit_short_urls')) : ?>
 					<div class="alignleft actions">
-						<select name="action">
+						<select name="action-b">
 							<option selected="selected" value="-1">Bulk Actions</option>
 							<option value="block">Block</option>
 							<option value="unblock">Unblock</option>
 							<option value="delete">Delete</option>
 						</select>
-						<input type="submit" class="button-secondary action" id="doaction" name="doaction" value="Apply" />
+						<input type="submit" class="button-secondary action" id="doaction-b" name="doaction-b" value="Apply" />
 					</div>
 		    		<?php endif; ?>
 		    		<div class="tablenav-pages">
@@ -799,7 +1013,7 @@ SYNECTED_CONTENT;
     	</div>
     	<?php
     }
-    function view_blacklist_page()
+    function view_blacklist_page($type = 0)
     {
     	global $wpdb, $current_user;
     	
@@ -908,6 +1122,126 @@ SYNECTED_CONTENT;
 		    </form>
     	</div>
     	<?php
+    }
+    function view_whitelist_page()
+    {
+    	view_blacklist_page(1);
+    }
+    function view_format_history_page()
+    {
+    	$history = $this->options['_format_history'];
+    	$history_count = count($history);
+    	?>
+    	<div class="wrap">
+	    	<h2>Short URL Format History</h2>
+	    	<blockquote class="setting-description">
+	    		This page shows the list of legacy formats (comprised of prefix &amp; suffix) that were configured at one 
+	    		time on this site. These are maintained for backwards compatibility, allowing you to change your short URL 
+	    		Prefix without breaking your existing links. You can delete old formats from this page if you no longer 
+	    		need them and want to keep things tidy.
+	    	</blockquote>
+	    	<form method="get" action="">
+	    		<input type="hidden" name="page" value="<?php echo $_GET['page']; ?>" />
+	    		<div class="tablenav">
+					<?php if (current_user_can('edit_short_urls')) : ?>
+					<div class="alignleft actions">
+						<select name="action">
+							<option selected="selected" value="-1">Bulk Actions</option>
+							<option value="delete">Delete</option>
+						</select>
+						<input type="submit" class="button-secondary action" id="doaction" name="doaction" value="Apply" />
+					</div>
+		    		<?php endif; ?>
+		    		<div class="tablenav-pages">
+		    			<span class="displaying-num">Displaying 
+		    				<?php echo ($history_count == 0 ? 0 : '1-'.$history_count).
+									' of '.$history_count ?></span>
+		    		</div>
+		    		<div class="clear"></div>
+		    	</div>
+		    	<div class="clear"></div>
+		    	<table class="widefat">
+		    		<thead>
+		    			<tr>
+		    				<th class="manage-column check-column" scope="col"><input type="checkbox"/></th>
+		    				<th class="manage-column">Format (with example)</th>
+		    				<th class="manage-column">Prefix</th>
+		    				<th class="manage-column">Suffix</th>
+		    			</tr>
+		    		</thead>
+		    		<tfoot>
+		    			<tr>
+		    				<th class="manage-column check-column" scope="col"><input type="checkbox"/></th>
+		    				<th class="manage-column">Format (with example)</th>
+		    				<th class="manage-column">Prefix</th>
+		    				<th class="manage-column">Suffix</th>
+		    			</tr>
+		    		</tfoot>
+		    		<tbody>
+		    		<?php 
+		    		if (count($history) > 0) :
+		    		
+		    			$odd = true; 
+		    			foreach ($history as $index => $entry) : 
+		    			
+		    			$classes = array();
+		    			if ($odd) $classes[] = 'alternate';
+		    			$odd = !$odd;
+		    			?>
+		    			<tr id="entry-row-<?php echo $index; ?>"<?php 
+		    				if (count($classes) > 0) echo ' class="'.implode(' ', $classes).'"'; ?>>
+		    				<th class="check-column" scope="row">
+								<input type="checkbox" value="<?php echo $index; ?>" name="entry[]"/>
+							</th>
+		    				<td>
+		    					<tt><?php echo trailingslashit($this->options['base_url']); 
+		    						echo stripslashes($entry['short_url_prefix']); ?>shortkey<?php 
+		    						echo stripslashes($entry['short_url_suffix']); ?></tt>
+		    					<?php if (current_user_can('edit_short_urls')) : ?>
+		    					<div class="row-actions" style="padding-top:8px;">
+		    						<span><a href="#" onclick="return deleteLegacy(<?php echo $index; ?>);">Delete</a></span>
+		    					</div>
+		    					<?php endif; ?>
+		    				</td>
+		    				<td><?php echo $entry['short_url_prefix']; ?></td>
+		    				<td><?php echo $entry['short_url_suffix']; ?></td>
+		    			</tr>
+		    			<?php endforeach; 
+		    		else : ?>
+		    			<tr class="noresults">
+		    				<td colspan="4">No formats found.</td>
+		    			</tr>
+		    		<?php endif; ?>
+		    		</tbody>
+		    	</table>
+	    		<div class="tablenav">
+					<?php if (current_user_can('edit_short_urls')) : ?>
+					<div class="alignleft actions">
+						<select name="action-b">
+							<option selected="selected" value="-1">Bulk Actions</option>
+							<option value="delete">Delete</option>
+						</select>
+						<input type="submit" class="button-secondary action" id="doaction-b" name="doaction-b" value="Apply" />
+					</div>
+		    		<?php endif; ?>
+		    		<div class="tablenav-pages">
+		    			<span class="displaying-num">Displaying 
+		    				<?php echo ($history_count == 0 ? 0 : '1-'.$history_count).
+									' of '.$history_count ?></span>
+		    		</div>
+		    		<div class="clear"></div>
+		    	</div>
+		    </form>
+    	</div>
+    	<?php
+    }
+    function delete_format($index)
+    {
+    	if (isset($this->options['_format_history'][$index])) unset($this->options['_format_history'][$index]);
+		update_option('synected_options', $this->options);
+		$this->options = stripslashes_deep($this->options);
+		global $wp_rewrite;
+		$wp_rewrite->flush_rules();
     }
 }
 
