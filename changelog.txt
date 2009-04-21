@@ -1,3 +1,6 @@
+v0.83 / 2009-04-21
+- Modified synected.class.php to be PHP4 compatible
+
 v0.82 / 2009-04-20
 - Fixed a bug that prevented unchecking of certain options after they had been checked
 - Added URL format history with management screen

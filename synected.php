@@ -3,7 +3,7 @@
 Plugin Name:Synected
 Plugin URI:http://www.blurbia.com/plugins/synected/
 Description: Creates branded shortened URLs, a la tinyurl.com or bit.ly.
-Version: 0.82 beta
+Version: 0.83 beta
 Author: Blurbia
 Author URI: http://www.blurbia.com/
 */

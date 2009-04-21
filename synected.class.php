@@ -27,9 +27,8 @@ class Synected
 	var $success = false;
 	var $blocked = false;
 	var $requested_key;
-	private static $instance;
-		
-    private function Synected() 
+	
+    function Synected() 
     {
 		global $wpdb, $wp_rewrite;
 		$this->t_urls 			= 	$wpdb->prefix . "synected_urls";
@@ -68,16 +67,7 @@ class Synected
 		add_filter('mod_rewrite_rules', array($this, 'add_rewrite_cond'), 100);
 		add_filter('query_vars', array($this, 'add_query_vars'));
     }
-	public static function singleton() 
-	{
-	    if (!isset(self::$instance)) {
-	        $c = __CLASS__;
-	        self::$instance = new $c;
-	    }
-	
-	    return self::$instance;
-	}
-	public function __clone()
+	function __clone()
 	{
 	    trigger_error('Clone operation disabled for class Synected. Synected is a Singleton.', E_USER_ERROR);
 	}
@@ -1246,5 +1236,5 @@ SYNECTED_CONTENT;
 }
 
 global $synected;
-$synected = Synected::singleton();
+$synected = new Synected();
 ?>
