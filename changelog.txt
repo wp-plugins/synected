@@ -1,3 +1,10 @@
+v0.84 / 2009-05-05
+- Fixed a bug that broke the paging of short URLs
+- Fixed a bug that broke the plugin if Wordpress was installed in a subdirectory
+- Fixed a bug that incorrectly dropped querystrings from URLs in some cases
+- Fixed a bug that caused a SQL error on some systems when no short URLs existed
+- Changed redirects from 302 to 301 for better SEO
+
 v0.83 / 2009-04-21
 - Modified synected.class.php to be PHP4 compatible
 

@@ -120,11 +120,13 @@ class Synected
 	}
 	function add_rewrite_rules(&$rewrite)
 	{
+		$pluginpath = str_replace(get_option('home').'/', '', WP_PLUGIN_URL);
+		
 		if (!empty($this->options['synected_url']))
-			$rewrite->add_external_rule($this->options['synected_url'].'$', PLUGINDIR.'/synected/create_url.php');
+			$rewrite->add_external_rule($this->options['synected_url'].'$', $pluginpath.'/synected/create_url.php');
 			
 		if ($this->options['create_from_url'])
-			$rewrite->add_external_rule('((http:/|https:/|www\.).+)$', PLUGINDIR.'/synected/create_url.php?url=$1');
+			$rewrite->add_external_rule('((http:/|https:/|www\.).+)$', $pluginpath.'/synected/create_url.php?synected_url=$1');
 			
 		if (empty($this->options['short_url_prefix']))
 		{
@@ -143,7 +145,7 @@ class Synected
 		$rewrite->add_external_rule($this->options['short_url_prefix'].
 									'(.+)'.
 									$this->options['short_url_suffix'].
-									'$', PLUGINDIR.'/synected/url.php?code=$1');
+									'$', $pluginpath.'/synected/url.php?code=$1');
 		
 		if (!is_array($this->options['_format_history'])) $this->options['_format_history'] = array();				
 		foreach ($this->options['_format_history'] as $entry)
@@ -151,7 +153,7 @@ class Synected
 			$rewrite->add_external_rule($entry['short_url_prefix'].
 									'(.+)'.
 									$entry['short_url_suffix'].
-									'$', PLUGINDIR.'/synected/url.php?code=$1');
+									'$', $pluginpath.'/synected/url.php?code=$1');
 		}
 	}
 	function add_rewrite_cond($rules)
@@ -355,7 +357,7 @@ class Synected
 		$synected_url = trailingslashit(get_bloginfo('url')).$this->options['synected_url'];
 		
 		if (!is_wp_error($this->errors)) :
-			if (isset($_GET['url'])) : 
+			if (isset($_GET['synected_url'])) : 
 		
 				$content = <<<SYNECTED_CONTENT
 				
@@ -379,10 +381,10 @@ SYNECTED_CONTENT;
 				
 				<form method="get" action="">
 					<p><label>Destination URL: <br/>
-						<input name="url" type="text" size="50" /></label></p>
+						<input name="synected_url" type="text" size="50" /></label></p>
 						
 					<p><label>Shortcut Key (Optional): <br/>
-						<input name="key" type="text" /></label></p>
+						<input name="synected_key" type="text" /></label></p>
 						
 					<p><input type="submit" class="submit button" value="Create URL" />
 				</form>
@@ -864,14 +866,17 @@ SYNECTED_CONTENT;
     	$url_count = $wpdb->get_var("select count(*) from $this->t_urls");
     	$url_blocked_count = $wpdb->get_var("select count(*) from $this->t_urls where status = 0");
 	    $url_unblocked_count = $url_count - $url_blocked_count;
-	    	
+	    
     	$page_count = ceil($url_count / $page_size);
     	if ($paged > $page_count) $paged = $page_count;
     	
-    	$offset = ($paged - 1) * $page_size;
-    	$urls = $wpdb->get_results(
-			"select * from $this->t_urls where 1=1 $where order by created desc, id desc limit $offset, $page_size"
-			);
+    	if ($url_count > 0)
+    	{
+	    	$offset = ($paged - 1) * $page_size;
+	    	$urls = $wpdb->get_results(
+				"select * from $this->t_urls where 1=1 $where order by created desc, id desc limit $offset, $page_size"
+				);
+    	}
     	?>
     	<div class="wrap">
 	    	<h2>Shortened URLs</h2>
@@ -901,7 +906,7 @@ SYNECTED_CONTENT;
 									' of '.$url_count ?></span>
 		    			<?php if ($page_count > 1) :
 		    			for ($i=1; $i<=$page_count; $i++) : ?>
-		    			<a class="page-numbers" href="?paged=<?php echo $i ?>"><?php echo $i ?></a>
+		    			<a class="page-numbers" href="<?php echo add_query_arg('paged', $i); ?>"><?php echo $i ?></a>
 		    			<?php endfor;
 		    			endif; ?>
 		    		</div>
@@ -931,7 +936,7 @@ SYNECTED_CONTENT;
 		    		</tfoot>
 		    		<tbody>
 		    		<?php 
-		    		if (count($urls) > 0) :
+		    		if ($url_count > 0) :
 		    		
 		    			$odd = true; 
 		    			foreach ($urls as $url) : 
@@ -993,7 +998,7 @@ SYNECTED_CONTENT;
 									' of '.$url_count ?></span>
 		    			<?php if ($page_count > 1) :
 		    			for ($i=1; $i<=$page_count; $i++) : ?>
-		    			<a class="page-numbers" href="?paged=<?php echo $i ?>"><?php echo $i ?></a>
+		    			<a class="page-numbers" href="<?php echo add_query_arg('paged', $i); ?>"><?php echo $i ?></a>
 		    			<?php endfor;
 		    			endif; ?>
 		    		</div>

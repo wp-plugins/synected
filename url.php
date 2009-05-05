@@ -32,7 +32,7 @@ $code = ($wp_rewrite->using_permalinks() ? $_GET['code'] : get_query_var($synect
 $url = $synected->get_url($code, true);
 
 if ($url)
-	wp_redirect($url);
+	wp_redirect($url, 301);
 else
 {
 	$synected->hook_theme();

@@ -25,6 +25,7 @@ if (!defined('ABSPATH')) {
 		}
 	}
 }
+if (!defined('ABSPATH')) die('Could not load Wordpress.');
 
 if (!current_user_can('edit_short_urls')) die('Access Denied.');
 
@@ -32,7 +33,7 @@ global $synected;
 if (isset($_GET['synected_action']))
 {
 	if (isset($_GET['url_id'])) $url_id = intval($_GET['url_id']);
-	if (isset($_GET['format_index'])) $format_index = intval($_GET['format_index']);
+	elseif (isset($_GET['format_index'])) $format_index = intval($_GET['format_index']);
 	else die();
 	
 	switch($_GET['synected_action'])
